@@ -1,0 +1,82 @@
+{
+  "$comment": "Machine-readable spec for the Railway template composer. Railway has no official template-spec file format; this mirrors the composer fields 1:1 so a human (or tool) can transcribe it exactly. Verified against upstream sources 2026-07-23.",
+  "name": "Cloud Dev Box — VS Code (code-server)",
+  "slug": "codeserver-devbox",
+  "category": "Developer Tools",
+  "tags": ["vscode", "code-server", "ide", "dev-environment", "cloud-ide", "coder"],
+  "shortDescription": "VS Code in your browser with password auth, a persistent home directory, and git/Node 22 LTS/Python 3/build-essential preinstalled.",
+  "services": [
+    {
+      "name": "code-server",
+      "source": {
+        "type": "repo",
+        "repo": "<YOUR_GITHUB_USER>/codeserver-devbox",
+        "rootDirectory": "/app",
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile",
+        "$comment": "Thin Dockerfile FROM codercom/code-server:4.129.0 (pinned; pushed 2026-07-17 — https://hub.docker.com/r/codercom/code-server/tags)."
+      },
+      "variables": {
+        "PASSWORD": {
+          "value": "${{ secret(24) }}",
+          "required": true,
+          "description": "Web IDE login password (auto-generated). Swap for HASHED_PASSWORD later — see SECURITY.md."
+        },
+        "WORKSPACE_DIR": {
+          "value": "/home/coder/project",
+          "required": false,
+          "description": "Default folder code-server opens; lives on the persistent volume."
+        }
+      },
+      "volumes": [
+        {
+          "mountPath": "/home/coder",
+          "$comment": "Entire home dir of uid 1000: code, extensions (~/.local/share/code-server), config (~/.config/code-server), SSH keys, dotfiles. Entrypoint chowns the root-owned mount on boot."
+        }
+      ],
+      "networking": {
+        "publicDomain": true,
+        "targetPort": 8080,
+        "$comment": "Entrypoint binds 0.0.0.0:${PORT:-8080}."
+      },
+      "healthcheck": {
+        "path": "/healthz",
+        "timeoutSeconds": 300,
+        "$comment": "Unauthenticated liveness endpoint, upstream-documented: https://github.com/coder/code-server/blob/main/docs/FAQ.md#what-is-the-healthz-endpoint"
+      },
+      "deploy": {
+        "restartPolicyType": "ON_FAILURE",
+        "numReplicas": 1,
+        "$comment": "Exactly 1 replica — code-server sessions and the volume are single-writer; never scale horizontally."
+      },
+      "recommendedResources": {
+        "memoryGB": 1,
+        "vcpu": 1,
+        "$comment": "Idles ~200-400MB; heavy builds want 2GB+/2vCPU. Enable App Sleeping to scale to zero when idle."
+      }
+    }
+  ],
+  "provenance": {
+    "verifiedAt": "2026-07-23",
+    "baseImage": "codercom/code-server:4.129.0",
+    "baseImageDigest": "sha256:49d5e176224523b0c924ee35b05c51e9a87f9c170f650ee0f7da05a4581a79ff",
+    "baseImagePushed": "2026-07-17",
+    "evidence": [
+      "https://hub.docker.com/v2/repositories/codercom/code-server/tags/4.129.0/ — tag exists, amd64+arm64",
+      "https://github.com/coder/code-server/blob/main/src/node/cli.ts — $PASSWORD and $HASHED_PASSWORD env handling; HASHED_PASSWORD precedence; CS_DISABLE_FILE_DOWNLOADS; CODE_SERVER_IDLE_TIMEOUT_SECONDS",
+      "https://github.com/coder/code-server/blob/main/ci/release-image/Dockerfile — Debian 13 base, coder uid 1000, NOPASSWD sudo, git/curl/openssh-client preinstalled, dumb-init, EXPOSE 8080",
+      "https://github.com/coder/code-server/blob/main/docs/FAQ.md — /healthz endpoint, argon2 hashed password workflow",
+      "https://github.com/nodesource/distributions — Node 22.x LTS deb repo (Debian 13's own nodejs is 20.19.x, EOL April 2026)"
+    ],
+    "rejectedAlternative": {
+      "image": "linuxserver/code-server:4.129.0",
+      "reasons": [
+        "Runs s6-overlay as root for the container lifetime; PUID/PGID model targets host bind mounts, irrelevant on Railway volumes",
+        "No auth at all if PASSWORD/HASHED_PASSWORD are unset (documented default) — a footgun for a public-domain template",
+        "sudo requires opt-in SUDO_PASSWORD and is unavailable in some of its modes; official image ships NOPASSWD sudo for uid 1000",
+        "Persistence split at /config with workspace at /config/workspace — less natural than a plain /home/coder",
+        "Community rebuild vs. official upstream image (upstream docs/env vars/healthz map 1:1 to the official image)"
+      ]
+    }
+  }
+}
