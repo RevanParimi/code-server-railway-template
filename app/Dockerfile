@@ -30,6 +30,9 @@ USER root
 #   unzip/zip            -> archive tools (also required by many SDK installers, e.g. bun, sdkman)
 #   jq                   -> JSON wrangling in the terminal
 #   less/rsync/procps    -> quality-of-life basics some slim bases miss
+#   tmux                 -> keeps long-running jobs (claude remote-control, autopilot,
+#                           monitors) alive outside browser terminals; started on
+#                           boot by ~/entrypoint.d hooks on the volume
 #   ca-certificates      -> refreshed CA bundle for TLS
 # (git, curl, wget, openssh-client are already in the base image — not repeated.)
 # --no-install-recommends + rm of apt lists keeps the layer lean.
@@ -47,6 +50,7 @@ RUN apt-get update \
     less \
     rsync \
     procps \
+    tmux \
     ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
